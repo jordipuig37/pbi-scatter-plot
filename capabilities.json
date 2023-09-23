@@ -1,14 +1,19 @@
 {
     "dataRoles": [
         {
+            "displayName": "X Axis",
+            "name": "xAxis",
+            "kind": "Measure"
+        },
+        {
+            "displayName": "Y Axis",
+            "name": "yAxis",
+            "kind": "Measure"
+        },
+        {
             "displayName": "Category Data",
             "name": "category",
             "kind": "Grouping"
-        },
-        {
-            "displayName": "Measure Data",
-            "name": "measure",
-            "kind": "Measure"
         }
     ],
     "objects": {

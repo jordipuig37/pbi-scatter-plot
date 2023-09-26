@@ -33,6 +33,7 @@ import VisualUpdateOptions = powerbi.extensibility.visual.VisualUpdateOptions;
 import IVisual = powerbi.extensibility.visual.IVisual;
 
 import { VisualFormattingSettingsModel } from "./settings";
+import { range } from "d3";
 
 /** TODO list
 [x] Add boilerplate from barchart or something
@@ -191,6 +192,12 @@ function visualTransform(options: VisualUpdateOptions, host: IVisualHost): Scatt
     };
 }
 
+interface Margins {
+    top: number,
+    bottom: number,
+    left: number,
+    right: number
+};
 
 /** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** **/
 export class Visual implements IVisual {
@@ -222,6 +229,7 @@ export class Visual implements IVisual {
 
     private formattingSettings: VisualFormattingSettingsModel;
     private formattingSettingsService: FormattingSettingsService;
+    private margin: Margins;
 
     constructor(options: VisualConstructorOptions) {
         console.log('Visual constructor', options);
@@ -251,6 +259,13 @@ export class Visual implements IVisual {
         this.yAxisLabel = this.svg
             .append('text')
             .classed('xAxisLasbel', true);
+
+        this.margin = {
+            top: 25,
+            bottom: 25,
+            left: 50,
+            right: 50
+        };
     }
         
     public update(options: VisualUpdateOptions) {
@@ -262,18 +277,38 @@ export class Visual implements IVisual {
 
         let width = options.viewport.width;
         let height = options.viewport.height;
+
         this.svg
             .attr('width', width)
             .attr('height', height)
 
+        // start with the xAxis
+        let xScale = scaleLinear()
+            .domain([xMin, xMax])
+            .range([this.margin.left, width - this.margin.right]);
+
+        this.xAxis
+            .attr('transform', `translate(0, ${height-this.margin.bottom})`)
+            .call(axisBottom(xScale))
+            .attr('color', 'black');
+
+        // same with yAxis
+        let yScale = scaleLinear()
+            .domain([yMin, yMax])
+            .range([height - this.margin.top, this.margin.bottom]);
+
+        this.yAxis
+            .attr('transform', `translate(${this.margin.left}, 0)`)
+            .call(axisLeft(yScale))
+            .attr('color', 'black');
 
         this.scatterDataPoints = viewModel.dataPoints;
         this.pointContainer.selectAll('circle')
             .data(this.scatterDataPoints)
             .join('circle')
-            .attr('cx', (d) => ((d.xValue - xMin) / xMax) * width)
-            .attr('cy', (d) => ((d.yValue - yMin) / yMax) * height)
-            .attr('r', 20)
+            .attr('cx', (d) => ((d.xValue - xMin) / xMax) * (width-this.margin.left-this.margin.right) + this.margin.left)
+            .attr('cy', (d) => height - this.margin.bottom - (d.yValue-yMin)/yMax*(height-this.margin.top-this.margin.bottom))
+            .attr('r', 5)
             .attr('fill', (d) => d.color);
     }
 }

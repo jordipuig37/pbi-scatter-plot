@@ -10,7 +10,6 @@ import ISandboxExtendedColorPalette = powerbi.extensibility.ISandboxExtendedColo
 import ISelectionManager = powerbi.extensibility.ISelectionManager;
 
 import {
-    event as d3Event,
     select as d3Select
 } from "d3-selection";
 import {
@@ -24,7 +23,6 @@ import { axisLeft } from "d3-axis";
 
 type Selection<T1, T2 = T1> = d3.Selection<any, T1, any, T2>;
 import ScaleLinear = d3.ScaleLinear;
-const getEvent = () => require("d3-selection").event;
 
 
 import { FormattingSettingsService } from "powerbi-visuals-utils-formattingmodel";
@@ -37,11 +35,39 @@ import IVisual = powerbi.extensibility.visual.IVisual;
 import { VisualFormattingSettingsModel } from "./settings";
 
 /** TODO list
-[ ] Add boilerplate from barchart or something
-[ ] define data interface
-[ ] define data transformation / parsing function
-
+[x] Add boilerplate from barchart or something
+[x] define data interface
+[x] define data transformation / parsing function
+    [ ] Validate
+    [ ] Improve
+[ ] Choose which option setting are relevant
+[ ] Define D3 logic to plot the chart
 */
+
+
+/**
+ * Get max function
+*/
+function getMax(array: Array<PrimitiveValue>) {
+    let max: PrimitiveValue = array[0];
+    for (let i = 0, len = array.length; i < len; i++) {
+        if (array[i] > max) {
+            max = array[i]
+        }
+    }
+    return max;
+}
+
+function getMin(array: Array<PrimitiveValue>) {
+    let max: PrimitiveValue = array[0];
+    for (let i = 0, len = array.length; i < len; i++) {
+        if (array[i] < max) {
+            max = array[i]
+        }
+    }
+    return max;
+}
+
 
 /**
  * Interface for ScatterPlot viewmodel.
@@ -53,7 +79,9 @@ import { VisualFormattingSettingsModel } from "./settings";
 interface ScatterPlotViewModel {
     dataPoints: DataPoint[];
     xMax: number;
+    xMin: number;
     yMax: number;
+    yMin: number;
     settings: ScatterPlottSettings;
 }
 
@@ -68,9 +96,8 @@ interface ScatterPlotViewModel {
  *                                        and visual interaction.
  */
 interface DataPoint {
-    xValue: PrimitiveValue;
-    yValue: PrimitiveValue;
-    category: string;
+    xValue: number;
+    yValue: number;
     color: string;
 }
 
@@ -114,82 +141,62 @@ interface ScatterPlottSettings {
 function visualTransform(options: VisualUpdateOptions, host: IVisualHost): ScatterPlotViewModel {
     let dataViews = options.dataViews;
     let viewModel: ScatterPlotViewModel = {
-        dataPoints: [],
-        xMax: 0,
-        yMax: 0,
+        dataPoints: [{xValue: 5, yValue: 3, color:'black'}, {xValue: 10, yValue: 3, color:'black'}],
+        xMax: 10,
+        xMin: 0,
+        yMax: 10,
+        yMin: 0,
         settings: <ScatterPlottSettings>{}
     };
 
-    if (!dataViews
+    if (!dataViews // TODO: check this for empty viz considering X and Y
         || !dataViews[0]
-        || !dataViews[0].categorical
-        || !dataViews[0].categorical.categories
-        || !dataViews[0].categorical.categories[0].source
-        || !dataViews[0].categorical.values
+        || !dataViews[0].table
+        || !dataViews[0].table.columns
+        || !dataViews[0].table.rows
     ) {
         return viewModel;
     }
 
-    let categorical = dataViews[0].categorical;
-    let category = categorical.categories[0];
-    let dataValue = categorical.values[0];
+    // Unpack data
+    let table = dataViews[0].table;
+    let columns = table.columns;
+    let rows = table.rows;
+    let xCol: Array<PrimitiveValue> = rows.map((row) => row[0]);
+    let yCol: Array<PrimitiveValue> = rows.map((row) => row[1]);
 
+    let xMax = <number>getMax(xCol);
+    let xMin = <number>getMin(xCol);
+    let yMax = <number>getMax(yCol);
+    let yMin = <number>getMin(yCol);
+
+    let scatterSettings = null;
     let scatterDataPoints: DataPoint[] = [];
-    let dataMax: number;
 
-    let colorPalette: ISandboxExtendedColorPalette = host.colorPalette;
-    let objects = dataViews[0].metadata.objects;
+    for (let i = 0, len = rows.length; i < len; i++) {
+        let color = 'black'; // TODO: Improve to color by category (category.values[i])
 
-    const strokeColor: string = getColumnStrokeColor(colorPalette);
-
-    let scatterPlottSettings: ScatterPlottSettings = {
-        enableAxis: {
-            show: getValue<boolean>(objects, 'enableAxis', 'show', defaultSettings.enableAxis.show),
-            fill: getAxisTextFillColor(objects, colorPalette, defaultSettings.enableAxis.fill),
-        },
-        generalView: {
-            opacity: getValue<number>(objects, 'generalView', 'opacity', defaultSettings.generalView.opacity),
-            showHelpLink: getValue<boolean>(objects, 'generalView', 'showHelpLink', defaultSettings.generalView.showHelpLink),
-            helpLinkColor: strokeColor,
-        },
-        averageLine: {
-            show: getValue<boolean>(objects, 'averageLine', 'show', defaultSettings.averageLine.show),
-            displayName: getValue<string>(objects, 'averageLine', 'displayName', defaultSettings.averageLine.displayName),
-            fill: getValue<string>(objects, 'averageLine', 'fill', defaultSettings.averageLine.fill),
-            showDataLabel: getValue<boolean>(objects, 'averageLine', 'showDataLabel', defaultSettings.averageLine.showDataLabel),
-        },
-    };
-
-    const strokeWidth: number = getColumnStrokeWidth(colorPalette.isHighContrast);
-
-    for (let i = 0, len = Math.max(category.values.length, dataValue.values.length); i < len; i++) {
-        ...
-
-        barChartDataPoints.push({
-            ...
+        scatterDataPoints.push({
+            xValue: <number>rows[i][0],
+            yValue: <number>rows[i][1],
+            color: color
         });
     }
 
-    dataMax = <number>dataValue.maxLocal;
-
     return {
-        dataPoints: barChartDataPoints,
-        dataMax: dataMax,
-        settings: barChartSettings,
+        dataPoints: scatterDataPoints,
+        xMax: xMax, xMin: xMin,
+        yMax: yMax, yMin: yMin,
+        settings: scatterSettings,
     };
 }
-
-
-
-
-
 
 
 /** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** **/
 export class Visual implements IVisual {
     private svg: Selection<any>;
     private host: IVisualHost;
-    private plotContainer: Selection<SVGElement>;
+    private pointContainer: Selection<SVGElement>;
     private xAxis: Selection<SVGElement>;
     private xAxisLabel: Selection<SVGElement>;
     private yAxis: Selection<SVGElement>;
@@ -208,6 +215,7 @@ export class Visual implements IVisual {
             left: 30,
         },
         xAxisFontMultiplier: 0.04,
+        pointSize: 200
     };
 // --------------------------------
     private target: HTMLElement;
@@ -221,42 +229,51 @@ export class Visual implements IVisual {
         this.target = options.element;
         this.host = options.host;
         this.svg = d3Select(options.element)
-        .append('svg')
-        .classed('scatterPlot', true);
+            .append('svg')
+            .classed('scatterPlot', true);
         
-        this.plotContainer = this.svg
-        .append('g')
-        .classed('plotContainer', true);
+        this.pointContainer = this.svg
+            .append('g')
+            .classed('pointContainer', true);
         
         this.xAxis = this.svg
             .append('g')
             .classed('xAxis', true);
             
-            this.yAxis = this.svg
+        this.yAxis = this.svg
             .append('g')
             .classed('xAxis', true);
             
-            this.xAxisLabel = this.svg
+        this.xAxisLabel = this.svg
             .append('text')
             .classed('xAxisLabel', true);
             
-            this.yAxisLabel = this.svg
+        this.yAxisLabel = this.svg
             .append('text')
-            .classed('xAxisLabel', true);
-        }
+            .classed('xAxisLasbel', true);
+    }
         
     public update(options: VisualUpdateOptions) {
         let viewModel: ScatterPlotViewModel = visualTransform(options, this.host);
-        let settings = this.scatterPlottSettings = viewModel.settings;
+        let xMax = viewModel.xMax;
+        let xMin = viewModel.xMin;
+        let yMax = viewModel.yMax;
+        let yMin = viewModel.yMin;
+
+        let width = options.viewport.width;
+        let height = options.viewport.height;
+        this.svg
+            .attr('width', width)
+            .attr('height', height)
+
 
         this.scatterDataPoints = viewModel.dataPoints;
-    }
-
-    /**
-     * Returns properties pane formatting model content hierarchies, properties and latest formatting values, Then populate properties pane.
-     * This method is called once every time we open properties pane or when the user edit any format property. 
-     */
-    public getFormattingModel(): powerbi.visuals.FormattingModel {
-        return this.formattingSettingsService.buildFormattingModel(this.formattingSettings);
+        this.pointContainer.selectAll('circle')
+            .data(this.scatterDataPoints)
+            .join('circle')
+            .attr('cx', (d) => ((d.xValue - xMin) / xMax) * width)
+            .attr('cy', (d) => ((d.yValue - yMin) / yMax) * height)
+            .attr('r', 20)
+            .attr('fill', (d) => d.color);
     }
 }
